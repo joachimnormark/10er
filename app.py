@@ -122,7 +122,7 @@ def render_number_buttons():
         with cols[i - 1]:
             if st.button(str(i), key=f"num_{i}", use_container_width=True):
                 handle_guess(i)
-                st.experimental_rerun()
+                st.rerun()
 
 
 # ---------- CSS ----------
@@ -237,7 +237,7 @@ col_start, _ = st.columns([1, 3])
 with col_start:
     if st.button("Start", key="start_btn", use_container_width=True):
         new_round()
-        st.experimental_rerun()
+        st.rerun()
 
 if st.session_state.phase in ["question", "wrong", "right"]:
     render_grid()
@@ -252,6 +252,6 @@ if st.session_state.phase == "right":
     # kort pause og ny runde
     time.sleep(2)
     new_round()
-    st.experimental_rerun()
+    st.rerun()
 elif st.session_state.phase == "wrong":
     st.markdown(f"<div class='message-wrong'>{st.session_state.message}</div>", unsafe_allow_html=True)
