@@ -28,14 +28,22 @@ if "message" not in st.session_state:
     st.session_state.message = ""
 if "blink_cells" not in st.session_state:
     st.session_state.blink_cells = []
+# Hvis vi er i reset-fasen, så start en ny runde "rigtigt"
+if st.session_state.phase == "reset":
+    st.session_state.n_blue = random.randint(1, 9)
+    st.session_state.phase = "question"
 
 
 def new_round():
-    st.session_state.n_blue = random.randint(1, 9)  # 1-9, ingen 0+10
-    st.session_state.phase = "question"
+    # Først nulstil alt visuelt
+    st.session_state.n_blue = None
     st.session_state.guess = None
+    st.session_state.phase = "reset"
     st.session_state.message = ""
     st.session_state.blink_cells = []
+
+    # Tving Streamlit til at vise et tomt grid
+    st.rerun()
 
 
 def handle_guess(guess):
