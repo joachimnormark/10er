@@ -62,28 +62,23 @@ def handle_guess(guess_value: int):
     correct_red = TARGET_SUM - n_blue
     st.session_state.last_guess = guess_value
 
-    # Beregn røde positioner (bagfra)
+    # Røde positioner (bagfra)
     red_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - guess_value - 1, -1))
 
-    # Blink-logik
     blink = []
 
+    # 1) Rød oveni blå → blink
     for idx in red_positions:
-        if idx < 0 or idx >= TOTAL_CELLS:
-            continue
-
-        # A) Rød oveni blå → blink
-        if idx < n_blue:
+        if 0 <= idx < n_blue:
             blink.append(idx)
 
-        # B) Hvis guess < correct_red → mangler røde i nogle felter
-        # (men kun hvis feltet findes)
-        if guess_value < correct_red:
-            needed_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - correct_red - 1, -1))
-            if idx not in red_positions and idx in needed_positions:
+    # 2) Felter der burde have rød (korrekt svar), men ikke har rød → blink
+    needed_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - correct_red - 1, -1))
+    for idx in needed_positions:
+        if 0 <= idx < TOTAL_CELLS:
+            if idx not in red_positions:
                 blink.append(idx)
 
-    # Fjern dubletter
     st.session_state.blink_cells = sorted(set(blink))
 
     # Rigtigt eller forkert?
@@ -111,7 +106,7 @@ def render_grid():
         st.markdown(f"<div class='grid'>{html}</div>", unsafe_allow_html=True)
         return
 
-    # Beregn røde positioner
+    # Røde positioner (bagfra)
     red_positions = []
     if phase in ["wrong_show", "right"]:
         red_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - guess - 1, -1))
@@ -125,9 +120,8 @@ def render_grid():
             classes.append("blue")
 
         # Rød
-        if idx in red_positions:
-            if phase in ["wrong_show", "right"]:
-                classes.append("red_up")
+        if idx in red_positions and phase in ["wrong_show", "right"]:
+            classes.append("red_up")
 
         # Blink
         if idx in st.session_state.blink_cells and phase == "wrong_show":
@@ -135,7 +129,6 @@ def render_grid():
 
         html_cells.append(f"<div class='{' '.join(classes)}'></div>")
 
-    # Rækker
     rows = []
     for r in range(GRID_ROWS):
         row = html_cells[r * GRID_COLS:(r + 1) * GRID_COLS]
@@ -191,11 +184,11 @@ st.markdown(f"""
 }}
 .cell.blue::before {{
     background-color: {BLUE_COLOR};
-    animation: dropIn 0.8s ease-out forwards;
+    animation: dropIn 1.0s ease-out forwards;
 }}
 .cell.red_up::before {{
     background-color: {RED_COLOR};
-    animation: riseIn 0.8s ease-out forwards;
+    animation: riseIn 1.0s ease-out forwards;
 }}
 @keyframes dropIn {{
     0% {{ transform: translateY(-150%); opacity: 0; }}
@@ -206,7 +199,7 @@ st.markdown(f"""
     100% {{ transform: translateY(0); opacity: 1; }}
 }}
 .blink {{
-    animation: blinkBg 0.5s ease-in-out 6;
+    animation: blinkBg 0.6s ease-in-out 6;
 }}
 @keyframes blinkBg {{
     0%, 100% {{ background-color: white; }}
@@ -226,9 +219,22 @@ st.markdown(f"""
     font-size: 1.2rem;
     padding: 10px 0;
 }}
+.message-right {{
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: #2e7d32;
+    text-align: center;
+    margin-top: 10px;
+}}
+.message-wrong {{
+    font-size: 2.0rem;
+    font-weight: 800;
+    color: #c62828;
+    text-align: center;
+    margin-top: 10px;
+}}
 </style>
 """, unsafe_allow_html=True)
-
 
 
 # ---------- UI ----------
@@ -263,14 +269,14 @@ if phase in ["question", "wrong_clear"]:
 # Wrong-show → blink → røde falder ned
 if phase == "wrong_show":
     st.markdown(f"<div class='message-wrong'>{st.session_state.message}</div>", unsafe_allow_html=True)
-    time.sleep(1.5)
+    time.sleep(2.0)
     st.session_state.phase = "wrong_clear"
     st.rerun()
 
 # Right → pause → tom tavle → ny runde
 if phase == "right":
     st.markdown(f"<div class='message-right'>{st.session_state.message}</div>", unsafe_allow_html=True)
-    time.sleep(2)
+    time.sleep(2.5)
     st.session_state.phase = "clear"
     st.session_state.n_blue = None
     st.session_state.last_guess = None
