@@ -10,9 +10,9 @@ GRID_ROWS = 2
 TOTAL_CELLS = GRID_COLS * GRID_ROWS
 TARGET_SUM = 10
 
-BLUE_COLOR = "#005BBB"   # mørk blå
-RED_COLOR = "#C62828"    # mørk rød
-BOX_COLOR = "#C62828"    # talbokse samme farve som rød
+BLUE_COLOR = "#005BBB"
+RED_COLOR = "#C62828"
+BOX_COLOR = "#C62828"
 
 RIGHT_MESSAGES = ["RIGTIGT!", "FLOT!", "GODT GÅET!", "SUPER!", "SEJT!"]
 WRONG_MESSAGES = ["Øv, prøv igen", "Tæt på, prøv igen", "Prøv en gang til", "Du kan godt!", "Næsten!"]
@@ -31,134 +31,117 @@ NUMBER_BUTTONS = [
 ]
 
 # Faser:
-# idle        = før spillet er startet
-# clear       = tom tavle mellem runder (1 sekund)
-# question    = blå cirkler vises, ingen røde
-# wrong_show  = blå + røde vises, blink gult, derefter falder røde ned
+# idle        = før spillet starter
+# clear       = tom tavle mellem runder
+# question    = blå vises
+# wrong_show  = blå + røde vises + blink
 # wrong_clear = kun blå tilbage, nyt forsøg
-# right       = blå + røde vises, rigtigt svar, ny runde efter 2 sek
+# right       = rigtigt svar, røde vises, ny runde efter pause
 
 
-# ---------- INIT SESSION STATE ----------
+# ---------- INIT ----------
 if "n_blue" not in st.session_state:
     st.session_state.n_blue = None
 if "phase" not in st.session_state:
     st.session_state.phase = "idle"
 if "last_guess" not in st.session_state:
     st.session_state.last_guess = None
-if "message" not in st.session_state:
-    st.session_state.message = ""
 if "blink_cells" not in st.session_state:
     st.session_state.blink_cells = []
+if "message" not in st.session_state:
+    st.session_state.message = ""
 
 
+# ---------- LOGIK ----------
 def handle_guess(guess_value: int):
-    """Håndter klik på en knap (sidste tal i udtrykket)."""
+    """Håndter klik på knap."""
     if st.session_state.phase not in ["question", "wrong_clear"]:
         return
 
     n_blue = st.session_state.n_blue
-    if n_blue is None:
-        return
-
     correct_red = TARGET_SUM - n_blue
     st.session_state.last_guess = guess_value
 
+    # Beregn røde positioner (bagfra)
+    red_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - guess_value - 1, -1))
+
+    # Blink-logik
+    blink = []
+
+    for idx in red_positions:
+        if idx < 0 or idx >= TOTAL_CELLS:
+            continue
+
+        # A) Rød oveni blå → blink
+        if idx < n_blue:
+            blink.append(idx)
+
+        # B) Hvis guess < correct_red → mangler røde i nogle felter
+        # (men kun hvis feltet findes)
+        if guess_value < correct_red:
+            needed_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - correct_red - 1, -1))
+            if idx not in red_positions and idx in needed_positions:
+                blink.append(idx)
+
+    # Fjern dubletter
+    st.session_state.blink_cells = sorted(set(blink))
+
+    # Rigtigt eller forkert?
     if guess_value == correct_red:
-        # Rigtigt svar
         st.session_state.phase = "right"
         st.session_state.message = random.choice(RIGHT_MESSAGES)
-        st.session_state.blink_cells = []
     else:
-        # Forkert svar
         st.session_state.phase = "wrong_show"
         st.session_state.message = random.choice(WRONG_MESSAGES)
-
-        blink = []
-        if guess_value < correct_red:
-            # for få røde -> tomme celler skal blinke
-            start = n_blue + guess_value
-            end = n_blue + correct_red
-            blink = list(range(start, min(end, TOTAL_CELLS)))
-        elif guess_value > correct_red:
-            # for mange røde -> ekstra røde celler skal blinke
-            start = n_blue + correct_red
-            end = n_blue + guess_value
-            blink = list(range(start, min(end, TOTAL_CELLS)))
-        st.session_state.blink_cells = blink
 
 
 def render_grid():
     phase = st.session_state.phase
     n_blue = st.session_state.n_blue
-    last_guess = st.session_state.last_guess if st.session_state.last_guess is not None else 0
+    guess = st.session_state.last_guess
 
-    # CLEAR-fase: tom tavle (ingen cirkler)
+    # CLEAR fase → tom tavle
     if phase == "clear":
-        html_cells = []
-        for idx in range(TOTAL_CELLS):
-            html_cells.append('<div class="cell"></div>')
-
-        rows_html = []
-        for r in range(GRID_ROWS):
-            row_cells = html_cells[r * GRID_COLS:(r + 1) * GRID_COLS]
-            rows_html.append(f'<div class="row">{"".join(row_cells)}</div>')
-
-        grid_html = f"""
-        <div class="grid">
-            {''.join(rows_html)}
-        </div>
-        """
-        st.markdown(grid_html, unsafe_allow_html=True)
+        html = "".join(
+            "<div class='row'>" +
+            "".join("<div class='cell'></div>" for _ in range(GRID_COLS)) +
+            "</div>"
+            for _ in range(GRID_ROWS)
+        )
+        st.markdown(f"<div class='grid'>{html}</div>", unsafe_allow_html=True)
         return
 
-    # Andre faser: vi kan have blå og evt. røde
-    if n_blue is None:
-        n_blue = 0
-
-    # Hvor mange røde skal vises?
+    # Beregn røde positioner
+    red_positions = []
     if phase in ["wrong_show", "right"]:
-        n_red = last_guess
-    else:
-        n_red = 0  # question, wrong_clear, idle
+        red_positions = list(range(TOTAL_CELLS - 1, TOTAL_CELLS - guess - 1, -1))
 
     html_cells = []
     for idx in range(TOTAL_CELLS):
         classes = ["cell"]
 
-        # Blå cirkler først
-        if idx < n_blue:
+        # Blå
+        if n_blue is not None and idx < n_blue:
             classes.append("blue")
 
-        # Røde cirkler efter blå
-        red_start = n_blue
-        red_end = n_blue + n_red
-        if red_start <= idx < red_end:
-            # I wrong_show skal de komme op (riseIn)
-            # I right også op
-            # I wrong_clear skal de være væk (n_red=0), så vi ender ikke her
+        # Rød
+        if idx in red_positions:
             if phase in ["wrong_show", "right"]:
                 classes.append("red_up")
 
-        # Blinkende celler ved forkert svar
+        # Blink
         if idx in st.session_state.blink_cells and phase == "wrong_show":
             classes.append("blink")
 
-        cell_div = f'<div class="{" ".join(classes)}"></div>'
-        html_cells.append(cell_div)
+        html_cells.append(f"<div class='{' '.join(classes)}'></div>")
 
-    # Lav rækker
-    rows_html = []
+    # Rækker
+    rows = []
     for r in range(GRID_ROWS):
-        row_cells = html_cells[r * GRID_COLS:(r + 1) * GRID_COLS]
-        rows_html.append(f'<div class="row">{"".join(row_cells)}</div>')
+        row = html_cells[r * GRID_COLS:(r + 1) * GRID_COLS]
+        rows.append("<div class='row'>" + "".join(row) + "</div>")
 
-    grid_html = f"""
-    <div class="grid">
-        {''.join(rows_html)}
-    </div>
-    """
-    st.markdown(grid_html, unsafe_allow_html=True)
+    st.markdown(f"<div class='grid'>{''.join(rows)}</div>", unsafe_allow_html=True)
 
 
 def render_number_buttons():
@@ -166,156 +149,91 @@ def render_number_buttons():
     cols = st.columns(9)
     for i, (label, value) in enumerate(NUMBER_BUTTONS):
         with cols[i]:
-            if st.button(label, key=f"num_{label}", use_container_width=True):
+            if st.button(label, key=f"btn_{label}", use_container_width=True):
                 handle_guess(value)
                 st.rerun()
 
 
 # ---------- CSS ----------
-st.markdown(
-    f"""
-    <style>
-    .grid {{
-        display: inline-block;
-        padding: 10px;
-        background-color: #f5f5f5;
-        border-radius: 16px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }}
-    .row {{
-        display: flex;
-        flex-direction: row;
-        justify-content: center;
-    }}
-    .cell {{
-        width: 120px;
-        height: 120px;
-        margin: 6px;
-        background-color: white;
-        border-radius: 16px;
-        position: relative;
-        overflow: hidden;
-        box-shadow: inset 0 0 0 2px #e0e0e0;
-    }}
-    .cell::before {{
-        content: "";
-        position: absolute;
-        width: 80%;
-        height: 80%;
-        border-radius: 50%;
-        top: 10%;
-        left: 10%;
-        opacity: 0;
-        transform: translateY(0);
-    }}
-    .cell.blue::before {{
-        background-color: {BLUE_COLOR};
-        animation: dropIn 0.8s ease-out forwards;
-    }}
-    .cell.red_up::before {{
-        background-color: {RED_COLOR};
-        animation: riseIn 0.8s ease-out forwards;
-    }}
-    @keyframes dropIn {{
-        0% {{ transform: translateY(-150%); opacity: 0; }}
-        100% {{ transform: translateY(0); opacity: 1; }}
-    }}
-    @keyframes riseIn {{
-        0% {{ transform: translateY(150%); opacity: 0; }}
-        100% {{ transform: translateY(0); opacity: 1; }}
-    }}
-    .blink {{
-        animation: blinkBg 0.5s ease-in-out 6;
-    }}
-    @keyframes blinkBg {{
-        0%, 100% {{ background-color: white; }}
-        50% {{ background-color: #FFEB3B; }}
-    }}
-    .numbers-title {{
-        font-size: 1.4rem;
-        font-weight: 600;
-        margin-bottom: 8px;
-        text-align: center;
-    }}
-    .stButton > button {{
-        background-color: {BOX_COLOR};
-        color: white;
-        border-radius: 12px;
-        border: none;
-        font-size: 1.2rem;
-        padding: 10px 0;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.2);
-    }}
-    .stButton > button:hover {{
-        background-color: #a32020;
-    }}
-    .message-right {{
-        font-size: 2rem;
-        font-weight: 800;
-        color: #2e7d32;
-        text-align: center;
-        margin-top: 10px;
-    }}
-    .message-wrong {{
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: #c62828;
-        text-align: center;
-        margin-top: 10px;
-    }}
-    .start-button > button {{
-        font-size: 1.4rem !important;
-        padding: 10px 24px !important;
-        border-radius: 20px !important;
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(f"""
+<style>
+.grid {{
+    display: inline-block;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}}
+.row {{
+    display: flex;
+    justify-content: center;
+}}
+.cell {{
+    width: 120px;
+    height: 120px;
+    margin: 6px;
+    background-color: white;
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 0 2px #e0e0e0;
+}}
+.cell::before {{
+    content: "";
+    position: absolute;
+    width: 80%;
+    height: 80%;
+    border-radius: 50%;
+    top: 10%;
+    left: 10%;
+    opacity: 0;
+}}
+.cell.blue::before {{
+    background-color: {BLUE_COLOR};
+    animation: dropIn 0.8s ease-out forwards;
+}}
+.cell.red_up::before {{
+    background-color: {RED_COLOR};
+    animation: riseIn 0.8s ease-out forwards;
+}}
+@keyframes dropIn {{
+    0% {{ transform: translateY(-150%); opacity: 0; }}
+    100% {{ transform: translateY(0); opacity: 1; }}
+}}
+@keyframes riseIn {{
+    0% {{ transform: translateY(150%); opacity: 0; }}
+    100% {{ transform: translateY(0); opacity: 1; }}
+}}
+.blink {{
+    animation: blinkBg 0.5s ease-in-out 6;
+}}
+@keyframes blinkBg {{
+    0%, 100% {{ background-color: white; }}
+    50% {{ background-color: #FFEB3B; }}
+}}
+.numbers-title {{
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-align: center;
+}}
+.stButton > button {{
+    background-color: {BOX_COLOR};
+    color: white;
+    border-radius: 12px;
+    border: none;
+    font-size: 1.2rem;
+    padding: 10px 0;
+}}
+</style>
+""", unsafe_allow_html=True)
+
 
 # ---------- UI ----------
 st.title("10'er-venner")
 
-st.write("Klik på **Start**, se hvor mange blå cirkler der kommer, og vælg så 10'er-vennen nedenunder.")
-
-col_start, _ = st.columns([1, 3])
-with col_start:
-    if st.button("Start", key="start_btn", use_container_width=True):
-        # Start ny runde: først tom tavle (clear)
-        st.session_state.phase = "clear"
-        st.session_state.n_blue = None
-        st.session_state.last_guess = None
-        st.session_state.message = ""
-        st.session_state.blink_cells = []
-        st.rerun()
-
-phase = st.session_state.phase
-
-# CLEAR-fase: vis tom tavle, vent 1 sekund, start ny runde
-if phase == "clear":
-    render_grid()
-    time.sleep(1)
-    st.session_state.n_blue = random.randint(1, 9)
-    st.session_state.last_guess = None
-    st.session_state.blink_cells = []
-    st.session_state.message = ""
-    st.session_state.phase = "question"
-    st.rerun()
-
-# Vis grid i alle andre aktive faser
-if phase in ["question", "wrong_show", "wrong_clear", "right"]:
-    render_grid()
-
-# Knapper kun når man skal svare
-if phase in ["question", "wrong_clear"]:
-    render_number_buttons()
-
-# Håndter beskeder og fase-skift
-if phase == "right":
-    st.markdown(f"<div class='message-right'>{st.session_state.message}</div>", unsafe_allow_html=True)
-    time.sleep(2)
-    # Efter rigtigt svar: tom tavle og ny runde
+if st.button("Start", use_container_width=True):
     st.session_state.phase = "clear"
     st.session_state.n_blue = None
     st.session_state.last_guess = None
@@ -323,13 +241,38 @@ if phase == "right":
     st.session_state.message = ""
     st.rerun()
 
-elif phase == "wrong_show":
-    st.markdown(f"<div class='message-wrong'>{st.session_state.message}</div>", unsafe_allow_html=True)
-    # Vis blink + røde et øjeblik, derefter fjern røde (kun blå tilbage)
-    time.sleep(1.5)
-    st.session_state.phase = "wrong_clear"
-    # I wrong_clear viser vi kun blå (n_red=0 i render_grid)
+phase = st.session_state.phase
+
+# CLEAR → tom tavle → vent → ny runde
+if phase == "clear":
+    render_grid()
+    time.sleep(1)
+    st.session_state.n_blue = random.randint(1, 9)
+    st.session_state.phase = "question"
     st.rerun()
 
-elif phase == "wrong_clear":
+# Tegn grid
+if phase in ["question", "wrong_show", "wrong_clear", "right"]:
+    render_grid()
+
+# Knapper
+if phase in ["question", "wrong_clear"]:
+    render_number_buttons()
+
+# Wrong-show → blink → røde falder ned
+if phase == "wrong_show":
     st.markdown(f"<div class='message-wrong'>{st.session_state.message}</div>", unsafe_allow_html=True)
+    time.sleep(1.5)
+    st.session_state.phase = "wrong_clear"
+    st.rerun()
+
+# Right → pause → tom tavle → ny runde
+if phase == "right":
+    st.markdown(f"<div class='message-right'>{st.session_state.message}</div>", unsafe_allow_html=True)
+    time.sleep(2)
+    st.session_state.phase = "clear"
+    st.session_state.n_blue = None
+    st.session_state.last_guess = None
+    st.session_state.blink_cells = []
+    st.session_state.message = ""
+    st.rerun()
